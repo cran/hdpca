@@ -193,9 +193,17 @@ lossf<-function(pop,eimax,z,v,gamma)
 }
 
 #Smoothing the LSD
-popsmooth<-function(pop,t1,z,v,gamma,eimax)
+popsmooth<-function(pop,t1,z,v,gamma,eimax,smooth)
 {	
 	p<-length(pop)
+	zbak<-z
+	vbak<-v
+	loss1<-1
+	loss2<-1
+	if(smooth==TRUE){
+	selz<-sample(1:length(z),200)	#Thinning - otherwise takes a lot of time
+	z<-z[selz]
+	v<-v[selz]
 	bwinc<-round(p/length(t1),0)
 	bw<-bwinc
 	loss1=lossf(pop,eimax,z,v,gamma)
@@ -206,34 +214,48 @@ popsmooth<-function(pop,t1,z,v,gamma,eimax)
 		bw<-bw+bwinc
 		pop2<-ksmooth(1:length(pop),pop,bandwidth=bw)$y
 		loss3=lossf(pop2,eimax,z,v,gamma)	
-		if(loss3>loss2*(1+10^-7) || rep>50) break
+		if(loss3>loss2*(1+10^-7) || rep>10) break
 		loss2<-loss3
 		rep<-rep+1
 	}
 	bw<-bw-bwinc
-	if(loss2<loss1)
-	{
-		return(ksmooth(1:length(pop),pop,bandwidth=bw)$y)
-	} else {
-		return(pop)
+	if(loss2<loss1) pop<-ksmooth(1:length(pop),pop,bandwidth=bw)$y
 	}
+	loss=lossf(pop,eimax,zbak,vbak,gamma)	
+	return(c(pop,loss))
 }
 
-karoui.nonsp<-function(samp.eval,m,p,n)
+findv2hi<-function(samp.scaled,lo,hi,n,m)
+{
+	mid=floor((lo+hi)/2)
+	v<-complex(real=0,imaginary=mid)
+	z<-complex(real=mean(samp.scaled),imaginary=1/mid)
+
+	flag.err<-1
+	try({
+	z<-invsteiltjes(v,z,samp.scaled,m,n)
+	flag.err<-0
+	},silent=TRUE)
+	if(flag.err==1)
+	{
+		return(findv2hi(samp.scaled,lo,mid,n,m))
+	} else {
+		if(mid==lo) return(mid)
+		return(findv2hi(samp.scaled,mid,hi,n,m))
+	}
+
+}
+
+karoui.nonsp<-function(samp.eval,m,p,n,smooth=TRUE)
 {
 gamma<-p/n
 eimax=samp.eval[m+1]	#Largest sample eigenvalue
-if (n>p)
-{
-	eimin=samp.eval[n]
-} else {
-	eimin=0	#Smallest sample eigenvalue
-}
-
 
 samp.scaled=samp.eval[(m+1):n]/eimax
-rev=seq(0,1,0.01)
-imv=seq(0.001,0.01,length.out=5)
+rev=seq(0,1,length.out=50)
+
+v2hi<-findv2hi(samp.scaled,0.0001,100,n,m)
+imv=seq(0.0001,v2hi,length.out=50)
 v=matrix(0,length(rev),length(imv))
 z<-matrix(mean(samp.scaled)+1i,length(rev),length(imv))
 for(i in 1:length(rev))
@@ -260,10 +282,22 @@ for(i in 1:length(rev))
 		flag.err<-0
 		},silent=TRUE)
 		}
-		if(Im(z[i,j])==0 || flag.err==1)	stop("The inverse stieltjes transform does not converge in Karoui's algorithm")
+		if(flag.err==1)
+		{
+			z[i,j]<-NA
+		}
 	}
 }
-z<-as.vector(z)
+z<-na.omit(as.vector(z))
+isImz0<-which(Im(z)==0)
+if(length(isImz0)>0) z<-z[-isImz0]
+if(length(z)<0.5*nrow(v)*ncol(v)) stop("The inverse stieltjes transform does not converge in Karoui's algorithm")
+zadd<-complex(real=c(seq(1.001,4,length.out=600)),imaginary=c(1e-2,1e-3))
+z<-c(z,zadd)
+dist<-NULL
+for(i in 1:length(z))	dist<-c(dist,min(abs(Re(z[i])-samp.scaled)))
+infd<-which(dist<10^-8)
+if(length(infd)>0)	z<-z[-infd]
 
 #Recalculating v from z as the Steiljes transform
 v<-rep(0,length(z))
@@ -272,16 +306,17 @@ for(i in 1:length(z))
 	v[i]=sum(1/(samp.scaled-z[i]))/(n-m) #These are the Steiljes transforms
 }
 
-
+print("Stieltjes transformations calculated")
 
 
 #Linear Programming problem
-t<-seq(eimin/eimax,1,5*10^-3)
-ai<-seq(eimin/eimax,1-2^(-7),2^(-7))
-bi<-seq(eimin/eimax+2^(-7),1,2^(-7))
+#t<-c(seq(0,0.9,length.out=100),seq(0.9,1,length.out=300))
+t<-seq(0,1,length.out=200)
+ai<-seq(0,1-2^(-7),2^(-7))
+bi<-seq(0+2^(-7),1,2^(-7))
 a=c(rep(0,(length(t)+length(ai))),1)
-A1<-NULL
-A2<-NULL
+A1<-matrix(NA,length(z)*2,length(a))
+A2<-matrix(NA,length(z)*2,length(a))
 A3=c(rep(1,(length(t)+length(ai))),0)
 b3=1
 b1=NULL
@@ -293,14 +328,16 @@ v2=v[i] #This is the Steiljes transform for z1
 
 term1<-Re(v2)/(Mod(v2)^2)+Re(z1)
 term2<- -Im(v2)/(Mod(v2)^2)+Im(z1)
-a11<-Re((p/sum(n))*t/(1+t*v2))
-a12<-Re((p/sum(n))*(1/v2-log((1+v2*bi)/(1+v2*ai))/((bi-ai)*(v2^2))))
-a21<--Im((p/sum(n))*t/(1+t*v2))
-a22<--Im((p/sum(n))*(1/v2-log((1+v2*bi)/(1+v2*ai))/((bi-ai)*(v2^2))))
-A1=rbind(A1,c(a11,a12,-1))
-A1=rbind(A1,c(a21,a22,-1))
-A2=rbind(A2,c(a11,a12,1))
-A2=rbind(A2,c(a21,a22,1))
+a1<-(p/sum(n))*t/(1+t*v2)
+a2<-(p/sum(n))*(1/v2-log((1+v2*bi)/(1+v2*ai))/((bi-ai)*(v2^2)))
+a11<-Re(a1)
+a12<-Re(a2)
+a21<--Im(a1)
+a22<--Im(a2)
+A1[(i-1)*2+1,]=c(a11,a12,-1)
+A1[(i-1)*2+2,]=c(a21,a22,-1)
+A2[(i-1)*2+1,]=c(a11,a12,1)
+A2[(i-1)*2+2,]=c(a21,a22,1)
 b1=c(b1,term1,-term2)
 b2=c(b2,term1,-term2)
 if(term1<0 || term2>0) break
@@ -325,9 +362,9 @@ if(simp$status!=0)
 }
 if(flag.err==0)	stop("The solution for the linear programming problem is not available in Karoui's algorithm")
 
+print("Spectrum estimated using linear programming")
 oldw <- getOption("warn")
 options(warn = -1)
-t<-seq(eimin/eimax,1,5*10^-3)
 t1<-c(t,ai)
 t1<-t1[order(t1)]
 if(flag.err==1)
@@ -364,54 +401,73 @@ est<-est*eimax
 pop=rev(est)
 
 #Smoothing the non-spikes
-pop<-popsmooth(pop,t1,z,v,gamma,eimax)
+
+pop<-popsmooth(pop,t1,z,v,gamma,eimax,smooth)
+if(smooth==TRUE)	print("Spectrum smoothing completed")
+
+
 pop<-c(rep(pop[1],m),pop)
 
 return(pop)
 }
 
 
-select.nspike<-function(samp.eval,p,n,n.spikes.max,evals.out=FALSE)
+select.nspike<-function(samp.eval,p,n,n.spikes.max,evals.out=FALSE,smooth=TRUE)
 {
-m<-n.spikes.max
+	m<-n.spikes.max
+	samp.eval<-samp.eval[order(samp.eval,decreasing=TRUE)]
 
 	if(length(samp.eval)<n-1 || length(samp.eval)>n)
 	{
 		stop("samp.eval must have length n or (n-1)")
 	} else {
-		if(length(samp.eval)==n-1)	samp.eval<-c(samp.eval,0)
+		if(length(samp.eval)==n-1)	n=n-1
+		if(length(samp.eval)==n & abs(samp.eval[n]-samp.eval[n-1])<=10^-5*samp.eval[n-1])
+		{
+			samp.eval<-samp.eval[-n]
+			n<-n-1
+		}
 	}
 repeat
 {
-pop.nonsp<-karoui.nonsp(samp.eval,m,p,n)
+pop.nonsp<-karoui.nonsp(samp.eval,m,p,n,smooth)
+loss<-pop.nonsp[p+1]
+pop.nonsp<-pop.nonsp[-c(p+1)]
 eval.l<-l.eval(samp.eval,pop.nonsp,m,p,n)
-#Mestre Assumption check
+
 if(min(eval.l)>0)
 {
 	break
 } else {
 	m=min(which(eval.l==min(eval.l)))-1
+	print(paste("Restarting algorithm with",m,"spikes"))
 }
 if(m==0)	stop("No distant spike was found")
 }
 if(evals.out)
 {
-	return(list(n.spikes=m,spikes=eval.l,nonspikes=pop.nonsp[(m+1):p]))
+	return(list(n.spikes=m,spikes=eval.l,nonspikes=pop.nonsp[(m+1):p],loss=loss))
 } else {
 	return(list(n.spikes=m))
 }
 }
 
 
-hdpc_est<-function(samp.eval,p,n,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spikes.max,n.spikes.out,nonspikes.out=FALSE)
+hdpc_est<-function(samp.eval,p,n,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spikes.max,n.spikes.out,nonspikes.out=FALSE,smooth=TRUE)
 {
 	method<-match.arg(method)
-
+	
+	samp.eval<-samp.eval[order(samp.eval,decreasing=TRUE)]
 	if(length(samp.eval)<n-1 || length(samp.eval)>n)
 	{
 		stop("samp.eval must have length n or (n-1)")
 	} else {
-		if(length(samp.eval)==n-1)	samp.eval<-c(samp.eval,0)
+		if(length(samp.eval)==n-1)	n=n-1
+		if(length(samp.eval)==n & abs(samp.eval[n]-samp.eval[n-1])<=10^-5*samp.eval[n-1])
+		{
+			samp.eval<-samp.eval[-n]
+			n<-n-1
+		}
 	}
 
 	flag.sp.lambda<-0
@@ -421,10 +477,11 @@ hdpc_est<-function(samp.eval,p,n,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spik
 		{
 			stop("Both n.spikes and n.spikes.max cannot be missing")
 		} else {
-			spike.select<-select.nspike(samp.eval,p,n,n.spikes.max,evals.out=TRUE)
+			spike.select<-select.nspike(samp.eval,p,n,n.spikes.max,evals.out=TRUE,smooth=smooth)
 			n.spikes<-spike.select$n.spikes
 			eval.l<-spike.select$spikes
 			pop.nonsp<-spike.select$nonspikes
+			loss<-spike.select$loss
 			pop.nonsp<-c(rep(pop.nonsp[1],n.spikes),pop.nonsp)
 			angle.l<-l.angle(eval.l,samp.eval,pop.nonsp,n.spikes,p,n)
 			corr.l<-angle.l*sqrt(samp.eval[1:n.spikes]/eval.l)
@@ -438,7 +495,9 @@ hdpc_est<-function(samp.eval,p,n,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spik
 		if(n.spikes.out>n.spikes)	stop("n.spikes.out must be smaller than n.spikes")
 		if(flag.sp.lambda==0)
 		{
-			pop.nonsp<-karoui.nonsp(samp.eval,n.spikes,p,n)
+			pop.nonsp<-karoui.nonsp(samp.eval,n.spikes,p,n,smooth=smooth)
+			loss<-pop.nonsp[p+1]
+			pop.nonsp<-pop.nonsp[-c(p+1)]
 			eval.l<-l.eval(samp.eval,pop.nonsp,n.spikes,p,n)
 			if(min(eval.l)<0)	stop("n.spikes is too large, the spectrum does not have that many distant spikes")
 			angle.l<-l.angle(eval.l,samp.eval,pop.nonsp,n.spikes,p,n)
@@ -449,11 +508,11 @@ hdpc_est<-function(samp.eval,p,n,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spik
 		{
 			return(list(spikes=eval.l[1:n.spikes.out],n.spikes=n.spikes,
 			angles=angle.l[1:n.spikes.out],correlations=corr.l[1:n.spikes.out],
-			shrinkage=shrink.l[1:n.spikes.out],nonspikes=pop.nonsp[(n.spikes+1):p]))
+			shrinkage=shrink.l[1:n.spikes.out],loss=loss,nonspikes=pop.nonsp[(n.spikes+1):p]))
 		} else {
 			return(list(spikes=eval.l[1:n.spikes.out],n.spikes=n.spikes,
 			angles=angle.l[1:n.spikes.out],correlations=corr.l[1:n.spikes.out],
-			shrinkage=shrink.l[1:n.spikes.out]))
+			shrinkage=shrink.l[1:n.spikes.out],loss=loss))
 		}
 	} else if(method=="d.gsp") {
 		if(missing(n.spikes.out))	n.spikes.out<-n.spikes
@@ -489,14 +548,14 @@ hdpc_est<-function(samp.eval,p,n,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spik
 	}
 }
 
-pc_adjust<-function(train.eval,p,n,test.scores,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spikes.max)
+pc_adjust<-function(train.eval,p,n,test.scores,method=c("d.gsp","l.gsp","osp"),n.spikes,n.spikes.max,smooth=TRUE)
 {
 	test.scores<-as.matrix(test.scores)
 	if(!missing(n.spikes))
 	{
-		shrinkage<-hdpc_est(train.eval,p,n,method=method,n.spikes=n.spikes)$shrinkage
+		shrinkage<-hdpc_est(train.eval,p,n,method=method,n.spikes=n.spikes,smooth=smooth)$shrinkage
 	} else {
-		shrinkage<-hdpc_est(train.eval,p,n,method=method,n.spikes.max=n.spikes.max)$shrinkage
+		shrinkage<-hdpc_est(train.eval,p,n,method=method,n.spikes.max=n.spikes.max,smooth=smooth)$shrinkage
 	}
 	m<-min(length(shrinkage),ncol(test.scores))
 	for(i in 1:m)

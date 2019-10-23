@@ -8,7 +8,7 @@ Estimates the population eigenvalues, angles between the sample and population e
 }
 \usage{
 hdpc_est(samp.eval, p, n, method = c("d.gsp", "l.gsp", "osp"), 
-n.spikes, n.spikes.max, n.spikes.out, nonspikes.out = FALSE)
+n.spikes, n.spikes.max, n.spikes.out, nonspikes.out = FALSE, smooth = TRUE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -35,7 +35,9 @@ Number of distant spikes to be returned in the output (Optional). If not specifi
 }
   \item{nonspikes.out}{
 Logical. If \code{TRUE} and \code{method="l.gsp"}, the estimated set of non-spikes are returned. If \code{TRUE} and \code{method="osp"}, the estimated value of the non-spike is returned.
-
+}
+  \item{smooth}{
+Logical. If \code{TRUE} and \code{method="l.gsp"}, kernel smoothing will be performed on the estimated population eigenvalue spectrum. Default is \code{TRUE}.
 }
 }
 \details{
@@ -48,6 +50,8 @@ The different choices for \code{method} are:
 At least one of \code{n.spikes} and \code{n.spikes.max} must be provided. If \code{n.spikes} is provided then \code{n.spikes.max} is ignored, else \code{n.spikes.max} is used to find out the number of distant spikes using \code{\link{select.nspike}}.
 
 The argument \code{nonspikes.out} is ignored if \code{method="d.gsp"}.
+
+The argument \code{smooth} is useful when the user assumes the population spectral distribution to be continuous.
 }
 \value{
 \item{spikes}{An array of estimated distant spikes. If \code{n.spikes.out} is specified, only largest \code{n.spikes.out} many eigenvalues are returned.}
@@ -55,12 +59,13 @@ The argument \code{nonspikes.out} is ignored if \code{method="d.gsp"}.
 \item{angles}{An array of estimated cosines of angles between the sample and population eigenvectors corresponding to the distant spikes. The \eqn{k^{th}} element of the array is the estimated cosine of the angle between \eqn{k^{th}} sample and population eigenvectors. If \code{n.spikes.out} is specified, only first \code{n.spikes.out} many \eqn{\cos}(angle)-s are returned.}
 \item{correlations}{An array of estimated correlations between the sample and population PC scores corresponding to the distant spikes. The \eqn{k^{th}} element of the array is the estimated correlation between \eqn{k^{th}} sample and population PC scores. If \code{n.spikes.out} is specified, only first \code{n.spikes.out} many correlations are returned.}
 \item{shrinkage}{An array of estimated asymptotic shrinkage factors corresponding to the distant spikes. If \code{n.spikes.out} is specified, only first \code{n.spikes.out} many shrinkage factors are returned.}
+\item{loss}{If \code{method="l.gsp"}, L-infinity loss function for the spectrum estimation is returned.}
 \item{nonspikes}{If \code{nonspikes.out=TRUE}, estimated non-spikes are returned. If \eqn{\lambda}-estimation method is used then this is a numeric vector of length \code{p-n.spikes}. If OSP model based method is used then this is a scalar number.}
 }
 \references{
-Dey, R. and Lee, S. (2016).
-\emph{Asymptotic properties of Principal Component Analysis and shrinkage-bias adjustment under the Generalized Spiked Population model.}
-arXiv:1607.08647
+Dey, R. and Lee, S. (2019).
+\emph{Asymptotic properties of principal component analysis and shrinkage-bias adjustment under the generalized spiked population model.}
+Journal of Multivariate Analysis, Vol 173, 145-164.
 }
 \author{
 Rounak Dey, \email{deyrnk@umich.edu}
@@ -70,11 +75,15 @@ Rounak Dey, \email{deyrnk@umich.edu}
 \code{\link{select.nspike},\link{pc_adjust}}
 }
 \examples{
-data(Example)
+data(hapmap)
 #n = 198, p = 75435 for this data
 
 ####################################################
 \dontrun{
+train.eval<-hapmap$train.eval
+n<-hapmap$nSamp
+p<-hapmap$nSNP
+
 m<-select.nspike(train.eval,p,n,n.spikes.max=10,evals.out=FALSE)$n.spikes
 out<-hdpc_est(train.eval, p, n, method = "d.gsp", 
 n.spikes=m, n.spikes.out=2, nonspikes.out = FALSE)	#Output 2 spikes, no non-spike

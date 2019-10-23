@@ -1,9 +1,8 @@
-d2e3372d6aa93fa7089fda7d00a33d8e *DESCRIPTION
-a452c32219e5866d9657e4598e4ca695 *NAMESPACE
-17a869c17f8b69fe2739646572e060d4 *R/pca_functions.R
-fec6ea79699c3707528e1a73f1865bc8 *data/Example.RData
-02fb126282cb0d596a9052bc21948326 *data/datalist
-08735a0f82d95296b3c8e9a22312d904 *man/Example.rd
-21ec58d50d18f588f9c13ffc404e3f18 *man/hdpc_est.Rd
-c9c214543686472eec6693fdd743eb93 *man/pc_adjust.Rd
-da3897539870a5596300c1068099b310 *man/select.nspike.Rd
+58215eef49f0caff5285ce47cd201212 *DESCRIPTION
+8e349036955c49522c681f623d75211c *NAMESPACE
+37e30d45f2ef6699920a3ae521669657 *R/pca_functions.R
+47df327c4169d87b1f36ea8e82f17fb7 *data/hapmap.RData
+705ee5c07190753432da7c381be61d26 *man/hapmap.rd
+e6e7bef8db863a5c704d559a2924478c *man/hdpc_est.Rd
+b6b588633edcea41341c47ce39d13fd0 *man/pc_adjust.Rd
+5a5b6da71c226ffbb75ea793885c63d9 *man/select.nspike.Rd
