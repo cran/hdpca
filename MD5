@@ -1,8 +1,8 @@
-58215eef49f0caff5285ce47cd201212 *DESCRIPTION
+3b54796be5d425ce1642c964fd2ecb2f *DESCRIPTION
 8e349036955c49522c681f623d75211c *NAMESPACE
 37e30d45f2ef6699920a3ae521669657 *R/pca_functions.R
 47df327c4169d87b1f36ea8e82f17fb7 *data/hapmap.RData
-705ee5c07190753432da7c381be61d26 *man/hapmap.rd
+08b3f90139c5ade8eb3bb4db17811a37 *man/hapmap.rd
 e6e7bef8db863a5c704d559a2924478c *man/hdpc_est.Rd
 b6b588633edcea41341c47ce39d13fd0 *man/pc_adjust.Rd
 5a5b6da71c226ffbb75ea793885c63d9 *man/select.nspike.Rd
